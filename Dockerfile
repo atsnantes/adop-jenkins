@@ -2,13 +2,21 @@ FROM jenkins:2.7.4
 
 MAINTAINER Nick Griffin, <nicholas.griffin>
 
+USER root
+COPY resources/plugins.txt /usr/share/jenkins/ref/
+RUN /usr/local/bin/plugins.sh /usr/share/jenkins/ref/plugins.txt
+
 ENV GERRIT_HOST_NAME gerrit
 ENV GERRIT_PORT 8080
 ENV GERRIT_JENKINS_USERNAME="" GERRIT_JENKINS_PASSWORD=""
 
+ENV BITBUCKET_HOSTNAME bitbucket
+ENV BITBUCKET_PORT 7990
+ENV BITBUCKET_JENKINS_USERNAME="" BITBUCKET_JENKINS_PASSWORD=""
+
 
 # Copy in configuration files
-COPY resources/plugins.txt /usr/share/jenkins/ref/
+
 COPY resources/init.groovy.d/ /usr/share/jenkins/ref/init.groovy.d/
 COPY resources/scripts/ /usr/share/jenkins/ref/adop_scripts/
 COPY resources/jobs/ /usr/share/jenkins/ref/jobs/
@@ -19,7 +27,7 @@ COPY resources/entrypoint.sh /entrypoint.sh
 COPY resources/scriptApproval.xml /usr/share/jenkins/ref/
 
 # Reprotect
-USER root
+
 RUN chmod +x -R /usr/share/jenkins/ref/adop_scripts/ && chmod +x /entrypoint.sh
 # USER jenkins
 
@@ -28,6 +36,6 @@ ENV ADOP_LDAP_ENABLED=true ADOP_SONAR_ENABLED=true ADOP_ANT_ENABLED=true ADOP_MA
 ENV LDAP_GROUP_NAME_ADMIN=""
 ENV JENKINS_OPTS="--prefix=/jenkins -Djenkins.install.runSetupWizard=false"
 
-RUN /usr/local/bin/plugins.sh /usr/share/jenkins/ref/plugins.txt
+#RUN /usr/local/bin/plugins.sh /usr/share/jenkins/ref/plugins.txt
 
 ENTRYPOINT ["/entrypoint.sh"]

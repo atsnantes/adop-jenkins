@@ -17,9 +17,6 @@ BASE_JENKINS_SSH_PUBLIC_KEY_KEY="${BASE_JENKINS_SSH_KEY}/public_key"
 JENKINS_HOME="/var/jenkins_home"
 JENKINS_SSH_DIR="${JENKINS_HOME}/.ssh"
 JENKINS_USER_CONTENT_DIR="${JENKINS_HOME}/userContent/"
-GERRIT_ADD_KEY_PATH="accounts/self/sshkeys"
-GERRIT_REST_AUTH="jenkins:jenkins"
-
 
 while getopts "c:p:u:w:" opt; do
   case $opt in
@@ -60,29 +57,47 @@ if [[ ! $(ls -A "${JENKINS_SSH_DIR}") ]]; then
 
   # Set correct permissions for Content Directory
   chown 1000:1000 "${JENKINS_USER_CONTENT_DIR}"
+  
+  # Put bitbucket into the known host list
+  ssh-keyscan -H -p 7999 -t rsa bitbucket > ${JENKINS_SSH_DIR}/known_hosts
 fi
-# public_key_val=$(cat ${JENKINS_SSH_DIR}/id_rsa.pub)
+
+# Getting key content
+public_key_val=$(cat ${JENKINS_SSH_DIR}/id_rsa.pub)
 
 # Set correct permissions on SSH Key
 chown -R 1000:1000 "${JENKINS_SSH_DIR}"
 
-# echo "Testing Gerrit Connection"
-# until curl -sL -w "\\n%{http_code}\\n" "http://${host}:${port}/gerrit" -o /dev/null | grep "200" &> /dev/null
-# do
-#     echo "Gerrit unavailable, sleeping for ${SLEEP_TIME}"
-#     sleep "${SLEEP_TIME}"
-# done
+echo "Testing Bitbucket Connection"
+# Init basic auth
+bitbucket_token=$(echo -n "${username}:${password}" | base64)
 
-# echo "Gerrit available, adding data"
-# count=1
-# until [ $count -ge ${MAX_RETRY} ]
-# do
-#   ret=$(curl -X POST --write-out "%{http_code}" --silent --output /dev/null \
-#           -u "${username}:${password}" \
-#           -H "Content-type: text/plain" \
-#           --data "${public_key_val}" "http://${host}:${port}/gerrit/a/${GERRIT_ADD_KEY_PATH}")
-#   [[ ${ret} -eq 201  ]] && break
-#   count=$[$count+1]
-#   echo "Unable to add jenkins public key on gerrit, response code ${ret}, retry ... ${count}"
-#   sleep ${SLEEP_TIME}
-# done
+until curl -sL -w "\\n%{http_code}\\n" -H "Authorization: Basic $bitbucket_token" "http://${host}:${port}/bitbucket/projects" -o /dev/null | grep "200" &> /dev/null
+do
+    echo "Bitbucket unavailable, sleeping for ${SLEEP_TIME}"
+    sleep "${SLEEP_TIME}"
+done
+
+echo "Bitbucket available, adding data"
+
+cat <<EOF > key.json
+{
+    "text": "$public_key_val"
+}
+EOF
+
+count=1
+until [ $count -ge ${MAX_RETRY} ]
+do
+
+  ret=$(curl -X POST --write-out "%{http_code}" --silent --output /dev/null \
+          -H "Authorization: Basic $bitbucket_token" \
+          -H "Content-Type: application/json" \
+          --data @key.json "http://${host}:${port}/bitbucket/rest/ssh/1.0/keys?user=$username")
+ 
+  # 201 = key added, 409 = key already exists
+  [[ ${ret} -eq 201  || ${ret} -eq 409  ]] && break
+  count=$[$count+1]
+  echo "Unable to add jenkins public key on bitbucket, response code ${ret}, retry ... ${count}"
+  sleep ${SLEEP_TIME}
+done

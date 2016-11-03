@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <project>
   <actions/>
-  <description>This job is responsible for retrieving the ADOP platform management repository and pushing it to the ADOP Gerrit instance.</description>
+  <description>This job is responsible for retrieving the ADOP platform management repository and pushing it to the ADOP Bitbucket instance.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
     <hudson.model.ParametersDefinitionProperty>
@@ -9,12 +9,17 @@
         <hudson.model.StringParameterDefinition>
           <name>GIT_URL</name>
           <description>The URL of the git repo for Platform Management.</description>
-          <defaultValue>https://github.com/Accenture/adop-platform-management.git</defaultValue>
+          <defaultValue>https://github.com/atsnantes/adop-platform-management.git</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>GIT_BRANCH</name>
+          <description>The branch of the git repo for Platform Management.</description>
+          <defaultValue>*/feature_bitbucket</defaultValue>
         </hudson.model.StringParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
           <name>GENERATE_EXAMPLE_WORKSPACE</name>
           <description>Should an example workspace be generated?</description>
-          <defaultValue>true</defaultValue>
+          <defaultValue>false</defaultValue>
         </hudson.model.BooleanParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
@@ -24,7 +29,7 @@
     </com.sonyericsson.rebuild.RebuildSettings>
     <de.pellepelster.jenkins.walldisplay.WallDisplayJobProperty plugin="jenkinswalldisplay@0.6.30"/>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@2.4.1">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@3.0.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -35,7 +40,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>$GIT_BRANCH</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -58,28 +63,53 @@ if [ -z $GIT_URL ]; then
     exit 1
 fi
 
-# Create Gerrit repository
-target_repo_name=&quot;platform-management&quot;
-repo_exists=0
-list_of_repos=$(ssh -n -o StrictHostKeyChecking=no -p 29418 gerrit gerrit ls-projects --type code)
+# Init globale var
+project_key=&quot;platform&quot;
+project_name=&quot;platform&quot;
+project_desc=&quot;Projets de gestion de la plateforme&quot;
+repo_name=&quot;platform-management&quot;
 
-for repo in ${list_of_repos}
-do
-  if [ ${repo} = ${target_repo_name} ]; then
-    echo &quot;Found: ${repo}&quot;
-    repo_exists=1
-    break
-  fi
-done
+# Init basic auth
+bitbucket_token=$(echo -n &quot;$BITBUCKET_ADMIN_USERNAME:$BITBUCKET_ADMIN_PASSWORD&quot; | base64)
 
-if [ ${repo_exists} -eq 0 ]; then
-  ssh -n -o StrictHostKeyChecking=no -p 29418 gerrit gerrit create-project --parent &quot;All-Projects&quot; &quot;${target_repo_name}&quot;
+# Check if project platform exists
+project_exists_return_code=$(curl -s -o /dev/null -w &apos;%{http_code}&apos; -X GET -H &quot;Authorization: Basic $bitbucket_token&quot; -H &quot;Content-Type: application/json&quot; http://bitbucket:7990/bitbucket/rest/api/1.0/projects/platform)
+
+if [ &quot;$project_exists_return_code&quot; -eq &quot;404&quot; ]; then
+
+cat &lt;&lt;EOF &gt; project.json
+{
+    &quot;key&quot;:&quot;$project_key&quot;,
+    &quot;name&quot;:&quot;$project_name&quot;,
+    &quot;description&quot;:&quot;$project_desc&quot;
+}
+EOF
+
+  curl -o /dev/null -X POST -H &quot;Authorization: Basic ${bitbucket_token}&quot; -H &quot;Content-Type: application/json&quot; -d @project.json http://bitbucket:7990/bitbucket/rest/api/1.0/projects
 else
-  echo &quot;Repository already exists, skipping: ${target_repo_name}&quot;
+  echo &quot;Project already exists, continue ...&quot;
+fi
+
+# Check if repo platform exists
+repo_exists_return_code=$(curl -s -o /dev/null -w &apos;%{http_code}&apos; -X GET -H &quot;Authorization: Basic $bitbucket_token&quot; -H &quot;Content-Type: application/json&quot; http://bitbucket:7990/bitbucket/rest/api/1.0/projects/$project_key/repos/$repo_name)
+
+if [ &quot;$repo_exists_return_code&quot; -eq &quot;404&quot; ]; then
+
+cat &lt;&lt;EOF &gt; repo.json
+{
+    &quot;name&quot;:&quot;$repo_name&quot;,
+    &quot;scmId&quot;:&quot;git&quot;, 
+    &quot;forkable&quot;:true 
+}
+EOF
+
+  curl -o /dev/null -X POST -H &quot;Authorization: Basic $bitbucket_token&quot; -H &quot;Content-Type: application/json&quot; -d @repo.json http://bitbucket:7990/bitbucket/rest/api/1.0/projects/$project_key/repos
+else
+  echo &quot;Repo already exists, continue ...&quot;
 fi
 
 # Setup remote &amp; populate
-git remote add adop ssh://jenkins@gerrit:29418/&quot;${target_repo_name}&quot;
+git remote add adop ssh://jenkins@bitbucket:7999/$project_key/${repo_name}.git
 git fetch adop
 git push adop +refs/remotes/origin/*:refs/heads/*</command>
     </hudson.tasks.Shell>
@@ -152,7 +182,7 @@ git push adop +refs/remotes/origin/*:refs/heads/*</command>
             </block>
             <buildAllNodesWithLabel>false</buildAllNodesWithLabel>
           </hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig>
-          <hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig>
+           <!-- <hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig>
             <configs class="empty-list"/>
             <projects>Platform_Management/Setup_Gerrit</projects>
             <condition>ALWAYS</condition>
@@ -178,7 +208,7 @@ git push adop +refs/remotes/origin/*:refs/heads/*</command>
               </failureThreshold>
             </block>
             <buildAllNodesWithLabel>false</buildAllNodesWithLabel>
-          </hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig>
+          </hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig>-->
         </configs>
       </buildStep>
       <runner class="org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail" plugin="run-condition@1.0"/>
@@ -186,14 +216,14 @@ git push adop +refs/remotes/origin/*:refs/heads/*</command>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.26">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.30">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>
     </hudson.plugins.ws__cleanup.PreBuildCleanup>
     <com.michelin.cio.hudson.plugins.maskpasswords.MaskPasswordsBuildWrapper/>
-    <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.7.1"/>
-    <com.cloudbees.jenkins.plugins.sshagent.SSHAgentBuildWrapper plugin="ssh-agent@1.7">
+    <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.8.6"/>
+    <com.cloudbees.jenkins.plugins.sshagent.SSHAgentBuildWrapper plugin="ssh-agent@1.13">
       <credentialIds>
         <string>adop-jenkins-master</string>
       </credentialIds>
