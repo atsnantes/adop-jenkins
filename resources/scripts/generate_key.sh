@@ -4,7 +4,7 @@ set -e
 # Usage
 usage() {
     echo "Usage:"
-    echo "    ${0} -c <host> -p <port> -u <username> -w <password>"
+    echo "    ${0} -c <host> -u <username> -w <password>"
     exit 1
 }
 
@@ -23,9 +23,6 @@ while getopts "c:p:u:w:" opt; do
     c)
       host=${OPTARG}
       ;;
-    p)
-      port=${OPTARG}
-      ;;
     u)
       username=${OPTARG}
       ;;
@@ -39,7 +36,7 @@ while getopts "c:p:u:w:" opt; do
   esac
 done
 
-if [ -z "${host}" ] || [ -z "${port}" ] || [ -z "${username}" ] || [ -z "${password}" ]; then
+if [ -z "${host}" ] || [ -z "${username}" ] || [ -z "${password}" ]; then
     echo "Parameters missing"
     usage
 fi
@@ -70,9 +67,15 @@ chown -R 1000:1000 "${JENKINS_SSH_DIR}"
 
 echo "Testing Bitbucket Connection"
 # Init basic auth
-bitbucket_token=$(echo -n "${username}:${password}" | base64)
+bitbucket_jenkins_token=$(echo -n "${username}:${password}" | base64)
 
-until curl -sL -w "\\n%{http_code}\\n" -H "Authorization: Basic $bitbucket_token" "http://${host}:${port}/bitbucket/projects" -o /dev/null | grep "200" &> /dev/null
+#curl -I -s -H "Authorization: Basic $bitbucket_admin_token" localhost:7990/bitbucket/projects | head -n 1 | cut -d$' ' -f2) == 200
+
+#until [[ -n "$(docker exec bitbucket curl -I -s -H "Authorization: Basic $bitbucket_admin_token" localhost:7990/bitbucket/projects | grep -e "200")" ]]; do 
+
+
+#until curl -sL -w "\\n%{http_code}\\n" -H "Authorization: Basic $bitbucket_jenkins_token" "http://${host}:7990/bitbucket/projects" -o /dev/null | grep "200" &> /dev/null
+until [[ $(curl -I -s -H "Authorization: Basic $bitbucket_admin_token" localhost:7990/bitbucket/projects | head -n 1 | cut -d$' ' -f2) != 200 ]];
 do
     echo "Bitbucket unavailable, sleeping for ${SLEEP_TIME}"
     sleep "${SLEEP_TIME}"
@@ -91,7 +94,7 @@ until [ $count -ge ${MAX_RETRY} ]
 do
 
   ret=$(curl -X POST --write-out "%{http_code}" --silent --output /dev/null \
-          -H "Authorization: Basic $bitbucket_token" \
+          -H "Authorization: Basic $bitbucket_jenkins_token" \
           -H "Content-Type: application/json" \
           --data @key.json "http://${host}:${port}/bitbucket/rest/ssh/1.0/keys?user=$username")
  

@@ -2,11 +2,7 @@
 
 echo "Genarate JENKINS SSH KEY and add it to bitbucket"
 
-host=$BITBUCKET_HOSTNAME
-port=$BITBUCKET_PORT
-username=$BITBUCKET_JENKINS_USERNAME
-password=$BITBUCKET_JENKINS_PASSWORD
-nohup /usr/share/jenkins/ref/adop\_scripts/generate_key.sh -c ${host} -p ${port} -u ${username} -w ${password} &
+nohup /usr/share/jenkins/ref/adop\_scripts/generate_key.sh -c $BITBUCKET_HOSTNAME -u $BITBUCKET_JENKINS_USERNAME -w $BITBUCKET_JENKINS_PASSWORD &
 
 echo "skip upgrade wizard step after installation"
 echo "2.7.4" > /var/jenkins_home/jenkins.install.UpgradeWizard.state
