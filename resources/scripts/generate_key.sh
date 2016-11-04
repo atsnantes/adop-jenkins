@@ -69,12 +69,6 @@ echo "Testing Bitbucket Connection"
 # Init basic auth
 bitbucket_jenkins_token=$(echo -n "${username}:${password}" | base64)
 
-#curl -I -s -H "Authorization: Basic $bitbucket_admin_token" localhost:7990/bitbucket/projects | head -n 1 | cut -d$' ' -f2) == 200
-
-#until [[ -n "$(docker exec bitbucket curl -I -s -H "Authorization: Basic $bitbucket_admin_token" localhost:7990/bitbucket/projects | grep -e "200")" ]]; do 
-
-
-#until curl -sL -w "\\n%{http_code}\\n" -H "Authorization: Basic $bitbucket_jenkins_token" "http://${host}:7990/bitbucket/projects" -o /dev/null | grep "200" &> /dev/null
 until [[ $(curl -I -s -H "Authorization: Basic $bitbucket_admin_token" localhost:7990/bitbucket/projects | head -n 1 | cut -d$' ' -f2) != 200 ]];
 do
     echo "Bitbucket unavailable, sleeping for ${SLEEP_TIME}"
@@ -96,7 +90,7 @@ do
   ret=$(curl -X POST --write-out "%{http_code}" --silent --output /dev/null \
           -H "Authorization: Basic $bitbucket_jenkins_token" \
           -H "Content-Type: application/json" \
-          --data @key.json "http://${host}:${port}/bitbucket/rest/ssh/1.0/keys?user=$username")
+          --data @key.json "http://${host}:7990/bitbucket/rest/ssh/1.0/keys?user=$username")
  
   # 201 = key added, 409 = key already exists
   [[ ${ret} -eq 201  || ${ret} -eq 409  ]] && break
